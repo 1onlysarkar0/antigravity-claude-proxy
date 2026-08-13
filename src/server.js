@@ -37,6 +37,10 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const app = express();
+// If the app is behind an HTTPS reverse proxy (nginx/Caddy/Traefik), trust proxy headers
+// so req.protocol and req.ip reflect the original client request. This is important when
+// PUBLIC_URL is an https domain and TLS is terminated by a front-facing proxy.
+app.set('trust proxy', true);
 
 // Disable x-powered-by header for security
 app.disable('x-powered-by');
