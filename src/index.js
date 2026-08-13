@@ -54,9 +54,16 @@ if (isFallbackEnabled) {
 export const FALLBACK_ENABLED = isFallbackEnabled;
 
 const PORT = process.env.PORT || DEFAULT_PORT;
-const HOST = process.env.HOST || '0.0.0.0';
+let HOST = process.env.HOST || '0.0.0.0';
 
-if (process.env.HOST) {
+// Cloud deployment compatibility: platforms like Render, Railway, or Google Cloud Run
+// might set HOST to 'localhost' or '127.0.0.1' by default, which restricts binding to loopback.
+// In production/cloud deployments, we must bind to '0.0.0.0' to accept external traffic.
+if (process.env.NODE_ENV === 'production' && (HOST === 'localhost' || HOST === '127.0.0.1')) {
+    logger.info(`[Startup] Detected HOST="${HOST}" in production/cloud environment. Overriding to "0.0.0.0" to allow external connections.`);
+    HOST = '0.0.0.0';
+    process.env.HOST = '0.0.0.0';
+} else if (process.env.HOST) {
     logger.info(`[Startup] Using HOST environment variable: ${process.env.HOST}`);
 }
 
@@ -109,9 +116,14 @@ const server = app.listen(PORT, HOST, () => {
         statusSection += `${border}    ${align4(`✓ Claude config: ${process.env.CLAUDE_CONFIG_PATH}`)}${border}\n`;
     }
 
+    const publicUrl = process.env.PUBLIC_URL || process.env.ANTHROPIC_BASE_URL;
+    const webuiUrl = publicUrl ? publicUrl.replace(/\/+$/, '') : `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
+    const claudeBaseUrl = publicUrl ? publicUrl.replace(/\/+$/, '') : `http://localhost:${PORT}`;
+
     const environmentSection = `║  Environment Variables:                                      ║
 ║    PORT                Server port (default: 8080)           ║
 ║    HOST                Bind address (default: 0.0.0.0)       ║
+║    PUBLIC_URL          Public domain URL (optional)          ║
 ║    HTTP_PROXY          Route requests through a proxy        ║
 ║    CLAUDE_CONFIG_PATH  Path to .claude dir (for systemd)     ║
 ║    See README.md for detailed configuration examples         ║`
@@ -121,8 +133,8 @@ const server = app.listen(PORT, HOST, () => {
 ║            Antigravity Claude Proxy Server v${packageVersion}            ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-${border}  ${align(`Server and WebUI running at: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)}${border}
-${border}  ${align(`Bound to: ${boundHost}:${boundPort}`)}${border}
+${border}  ${align(`Server and WebUI running at: ${webuiUrl}`)}${border}
+${HOST === '0.0.0.0' && !publicUrl ? `${border}  ${align(`Publicly accessible at: http://<your-domain-or-ip>:${PORT}`)}${border}\n` : ''}${border}  ${align(`Bound to: ${boundHost}:${boundPort}`)}${border}
 ${statusSection}║                                                              ║
 ${controlSection}
 ║                                                              ║
@@ -137,7 +149,7 @@ ${border}  ${align(`Configuration:`)}${border}
 ${border}    ${align4(`Storage: ${CONFIG_DIR}`)}${border}
 ║                                                              ║
 ║  Usage with Claude Code:                                     ║
-${border}    ${align4(`export ANTHROPIC_BASE_URL=http://localhost:${PORT}`)}${border}
+${border}    ${align4(`export ANTHROPIC_BASE_URL=${claudeBaseUrl}`)}${border}
 ${border}    ${align4(`export ANTHROPIC_API_KEY=${config.apiKey || 'dummy'}`)}${border}
 ║    claude                                                    ║
 ║                                                              ║

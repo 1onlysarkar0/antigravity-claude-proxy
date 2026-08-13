@@ -32,6 +32,7 @@ function deepMerge(target, source) {
 const DEFAULT_CONFIG = {
     apiKey: '',
     webuiPassword: '',
+    publicUrl: '',
     debug: false,
     devMode: false,
     logLevel: 'info',
@@ -124,6 +125,8 @@ function loadConfig() {
         // Environment overrides
         if (process.env.API_KEY) config.apiKey = process.env.API_KEY;
         if (process.env.WEBUI_PASSWORD) config.webuiPassword = process.env.WEBUI_PASSWORD;
+        if (process.env.PUBLIC_URL) config.publicUrl = process.env.PUBLIC_URL;
+        else if (process.env.ANTHROPIC_BASE_URL) config.publicUrl = process.env.ANTHROPIC_BASE_URL;
         if (process.env.DEBUG === 'true') config.debug = true;
         if (process.env.DEV_MODE === 'true') config.devMode = true;
 

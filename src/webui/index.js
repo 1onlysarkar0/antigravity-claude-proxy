@@ -120,7 +120,8 @@ function createAuthMiddleware() {
         const isApiRoute = req.path.startsWith('/api/');
         const isAuthUrl = req.path === '/api/auth/url';
         const isConfigGet = req.path === '/api/config' && req.method === 'GET';
-        const isProtected = (isApiRoute && !isAuthUrl && !isConfigGet) || req.path === '/account-limits' || req.path === '/health';
+        // Note: /health must NOT be protected so Docker & cloud load balancer health checks return 200 OK
+        const isProtected = (isApiRoute && !isAuthUrl && !isConfigGet) || req.path === '/account-limits';
 
         if (isProtected) {
             const providedPassword = req.headers['x-webui-password'] || req.query.password;
