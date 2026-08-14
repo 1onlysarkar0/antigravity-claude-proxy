@@ -167,6 +167,13 @@ export class PriorityStrategy extends BaseStrategy {
      */
     onRateLimit(account, modelId) {
         logger.info(`[PriorityStrategy] Account ${account?.email} rate-limited on ${modelId}. Failing over to next priority candidate.`);
+        if (account?.email) {
+            for (const [sId, email] of this.#sessionPins.entries()) {
+                if (email === account.email) {
+                    this.#sessionPins.delete(sId);
+                }
+            }
+        }
     }
 
     /**

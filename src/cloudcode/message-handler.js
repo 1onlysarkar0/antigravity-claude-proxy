@@ -187,8 +187,8 @@ export async function sendMessage(anthropicRequest, accountManager, fallbackEnab
                             const category = classify429(errorText);
                             const resetMs = parseResetTime(response, errorText);
                             const decision = decide429(category, resetMs);
-                            const totalUsableAccounts = accountManager.getAvailableAccounts(model).length;
-                            const isSingleAccount = totalUsableAccounts <= 1 || accountManager.getAccountCount() <= 1;
+                            const enabledAccounts = (accountManager.accounts || []).filter(a => a.enabled !== false && !a.isInvalid);
+                            const isSingleAccount = enabledAccounts.length <= 1;
 
                             logger.info(`[CloudCode] 429 (${category} -> ${decision.kind}): ${decision.reason} (${account.email})`);
 
@@ -340,13 +340,8 @@ export async function sendMessage(anthropicRequest, accountManager, fallbackEnab
                 accountManager.notifyRateLimit(account, model);
                 logger.info(`[CloudCode] Account ${account.email} rate-limited, trying next...`);
 
-                // CRITICAL FIX: If this is a duplicate rate limit (account was already known to be
-                // rate-limited), don't count it as a failed attempt. This prevents "Max retries exceeded"
-                // when thundering herd causes all accounts to be rate-limited and we're just cycling
-                // through known-bad accounts waiting for rate limits to expire.
-                if (error.message?.includes('RATE_LIMITED_DEDUP')) {
-                    attempt--;
-                }
+                // CRITICAL FIX: Account switching on rate limits must not burn client retry budget
+                attempt--;
                 continue;
             }
             if (isAuthError(error)) {
