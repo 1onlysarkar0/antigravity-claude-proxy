@@ -45,7 +45,7 @@ async function runTests() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': 'dummy'
+                    'x-api-key': 'sk-e9b9203483b16f7e-b9b338-6a8c937f'
                 },
                 body: JSON.stringify(body)
             });
