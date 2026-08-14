@@ -157,6 +157,11 @@ export function saveConfig(updates) {
         // Apply updates (deep merge to preserve nested configs)
         config = deepMerge(config, updates);
 
+        const dir = path.dirname(CONFIG_FILE);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
         // Save to disk
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
         return true;

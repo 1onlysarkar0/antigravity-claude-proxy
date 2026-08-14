@@ -566,7 +566,9 @@ export function mountWebUI(app, dirname, accountManager) {
      */
     app.get('/api/config/raw', (req, res) => {
         try {
-            const configPath = path.join(os.homedir(), '.config', 'antigravity-proxy', 'config.json');
+            const configDir = process.env.DATA_DIR || process.env.CONFIG_DIR || process.env.PERSISTENT_DIR || path.join(os.homedir(), '.config', 'antigravity-proxy');
+            const configPath = process.env.CONFIG_FILE || path.join(configDir, 'config.json');
+            
             if (fs.existsSync(configPath)) {
                 const content = fs.readFileSync(configPath, 'utf8');
                 res.json({ status: 'ok', content, path: configPath });
@@ -596,7 +598,13 @@ export function mountWebUI(app, dirname, accountManager) {
                 return res.status(400).json({ status: 'error', error: `Invalid JSON syntax: ${jsonErr.message}` });
             }
 
-            const configPath = path.join(os.homedir(), '.config', 'antigravity-proxy', 'config.json');
+            const configDir = process.env.DATA_DIR || process.env.CONFIG_DIR || process.env.PERSISTENT_DIR || path.join(os.homedir(), '.config', 'antigravity-proxy');
+            const configPath = process.env.CONFIG_FILE || path.join(configDir, 'config.json');
+
+            if (!fs.existsSync(configDir)) {
+                fs.mkdirSync(configDir, { recursive: true });
+            }
+
             fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf8');
 
             saveConfig(parsed);
