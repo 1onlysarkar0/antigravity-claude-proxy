@@ -29,7 +29,17 @@ const QUOTA_EXHAUSTED_KEYWORDS = [
     'individual quota',
     'free tier',
     'daily limit',
-    'exhausted your capacity'
+    'exhausted your capacity',
+    'daily quota',
+    'monthly quota',
+];
+
+// IMPORTANT: Google Cloud Code uses RESOURCE_EXHAUSTED for BURST/SESSION limits
+// (resets in 2-30 seconds), NOT daily quota. It must NOT trigger 24h lockout.
+// Only treat resource_exhausted as quota if combined with daily/quota keywords above.
+const BURST_ONLY_KEYWORDS = [
+    'resource_exhausted',
+    'resource has been exhausted',
 ];
 
 const CREDITS_EXHAUSTED_KEYWORDS = [
@@ -62,7 +72,7 @@ export function classify429(errorMessage) {
         return 'rate_limited';
     }
 
-    // 1. Quota exhaustion keywords
+    // 1. Quota exhaustion keywords (genuine daily/plan limits)
     for (const kw of QUOTA_EXHAUSTED_KEYWORDS) {
         if (lower.includes(kw)) return 'quota_exhausted';
     }
@@ -72,7 +82,14 @@ export function classify429(errorMessage) {
         if (lower.includes(kw)) return 'quota_exhausted';
     }
 
-    // 3. Rate limit / RPM / per-minute
+    // 3. Google Cloud Code RESOURCE_EXHAUSTED = BURST/SESSION limit (NOT daily quota!)
+    //    These reset in 2-30 seconds and must NOT trigger the 24h lockout.
+    //    Treat them the same as rate_limited (short cooldown, switch account).
+    for (const kw of BURST_ONLY_KEYWORDS) {
+        if (lower.includes(kw)) return 'rate_limited';
+    }
+
+    // 4. Rate limit / RPM / per-minute
     if (
         lower.includes('per minute') ||
         lower.includes('rpm') ||
@@ -83,7 +100,7 @@ export function classify429(errorMessage) {
         return 'rate_limited';
     }
 
-    // 4. Soft / burst limits
+    // 5. Soft / burst limits
     if (lower.includes('try again') || lower.includes('temporarily') || lower.includes('high traffic')) {
         return 'soft_rate_limit';
     }
@@ -121,8 +138,11 @@ export function decide429(category, retryAfterMs) {
         case 'quota_exhausted':
             return {
                 kind: 'full_quota_exhausted',
-                retryAfterMs: retryAfterMs ?? FULL_QUOTA_COOLDOWN_MS,
-                reason: 'Quota exhausted — switch account or 24h cooldown'
+                // Cap at 30 minutes even for real quota exhaustion.
+                // If it IS a daily limit, the next request will 429 again and we re-lock.
+                // This prevents false-positive 24h lockouts from misclassified burst limits.
+                retryAfterMs: retryAfterMs ?? (30 * 60 * 1000), // 30 min default (not 24h)
+                reason: 'Quota exhausted — switch account or wait for reset'
             };
 
         default:

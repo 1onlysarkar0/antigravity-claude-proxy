@@ -203,14 +203,21 @@ export function parseRateLimitReason(errorText, status) {
 
     const lower = (errorText || '').toLowerCase();
 
-    // Check for quota exhaustion (daily/hourly limits)
+    // Check for quota exhaustion (daily/hourly limits) — strict keywords only
     if (lower.includes('quota_exhausted') ||
         lower.includes('quotaresetdelay') ||
         lower.includes('quotaresettimestamp') ||
-        lower.includes('resource_exhausted') ||
         lower.includes('daily limit') ||
-        lower.includes('quota exceeded')) {
+        lower.includes('quota exceeded') ||
+        lower.includes('daily quota') ||
+        lower.includes('monthly quota')) {
         return 'QUOTA_EXHAUSTED';
+    }
+
+    // IMPORTANT: resource_exhausted from Google Cloud Code is a BURST/SESSION limit
+    // (resets in 2-30 seconds). Treat as rate limit, NOT daily quota exhaustion.
+    if (lower.includes('resource_exhausted') || lower.includes('resource has been exhausted')) {
+        return 'RATE_LIMIT_EXCEEDED';
     }
 
     // Check for model capacity issues (temporary, retry quickly)
