@@ -23,9 +23,9 @@ import { formatDuration } from './utils/helpers.js';
 import { logger } from './utils/logger.js';
 import usageStats from './modules/usage-stats.js';
 
-// Parse fallback flag directly from command line args to avoid circular dependency
+// Enable model fallback by default unless explicitly disabled (ensures subagents never crash on 429)
 const args = process.argv.slice(2);
-const FALLBACK_ENABLED = args.includes('--fallback') || process.env.FALLBACK === 'true';
+const FALLBACK_ENABLED = !args.includes('--no-fallback') && process.env.FALLBACK !== 'false' && config?.fallbackEnabled !== false;
 
 // Parse --strategy flag (format: --strategy=sticky or --strategy sticky)
 let STRATEGY_OVERRIDE = null;
