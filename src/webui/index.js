@@ -16,7 +16,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import express from 'express';
-import { getPublicConfig, saveConfig, config } from '../config.js';
+import { getPublicConfig, saveConfig, reloadConfig, config } from '../config.js';
 import { DEFAULT_PORT, ACCOUNT_CONFIG_PATH, MAX_ACCOUNTS, DEFAULT_PRESETS, DEFAULT_SERVER_PRESETS } from '../constants.js';
 import { readClaudeConfig, updateClaudeConfig, replaceClaudeConfig, getClaudeConfigPath, readPresets, savePreset, deletePreset } from '../utils/claude-config.js';
 import { readServerPresets, saveServerPreset, updateServerPreset, deleteServerPreset } from '../utils/server-presets.js';
@@ -598,6 +598,7 @@ export function mountWebUI(app, dirname, accountManager) {
                 return res.status(400).json({ status: 'error', error: `Invalid JSON syntax: ${jsonErr.message}` });
             }
 
+            // Determine the SAME path that config.js uses at startup so both agree
             const configDir = process.env.DATA_DIR || process.env.CONFIG_DIR || process.env.PERSISTENT_DIR || path.join(os.homedir(), '.config', 'antigravity-proxy');
             const configPath = process.env.CONFIG_FILE || path.join(configDir, 'config.json');
 
@@ -605,10 +606,19 @@ export function mountWebUI(app, dirname, accountManager) {
                 fs.mkdirSync(configDir, { recursive: true });
             }
 
+            // Write directly to disk first
             fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf8');
 
-            saveConfig(parsed);
+            // Hot-reload: re-read the file and mutate the in-process config object in-place
+            // This makes every module immediately see the new values without a server restart
+            reloadConfig();
+
+            // Reload accounts if strategy / account settings changed
             if (accountManager) {
+                // Handle strategy hot-reload
+                if (parsed.accountSelection?.strategy && parsed.accountSelection.strategy !== accountManager.getStrategy?.()) {
+                    logger.info(`[WebUI] Strategy hot-reloaded to: ${parsed.accountSelection.strategy}`);
+                }
                 await accountManager.reload();
             }
 

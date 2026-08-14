@@ -100,39 +100,46 @@ if (!fs.existsSync(CONFIG_DIR)) {
     }
 }
 
-// Load config
-let config = { ...DEFAULT_CONFIG };
+// Config object — exported as a REFERENCE. Must be mutated in-place (never reassigned)
+// so all modules that already imported { config } see the latest values.
+const config = { ...DEFAULT_CONFIG };
+
+function _applyConfigInPlace(merged) {
+    // Mutate in-place so all importers of { config } see the new values immediately
+    Object.keys(config).forEach(k => { delete config[k]; });
+    Object.assign(config, merged);
+}
 
 function loadConfig() {
     try {
-        // Env vars take precedence for initial defaults, but file overrides them if present?
-        // Usually Env > File > Default.
+        let merged = { ...DEFAULT_CONFIG };
 
         if (fs.existsSync(CONFIG_FILE)) {
             const fileContent = fs.readFileSync(CONFIG_FILE, 'utf8');
             const userConfig = JSON.parse(fileContent);
-            config = deepMerge(DEFAULT_CONFIG, userConfig);
+            merged = deepMerge(DEFAULT_CONFIG, userConfig);
         } else {
-             // Try looking in current dir for config.json as fallback
-             const localConfigPath = path.resolve('config.json');
-             if (fs.existsSync(localConfigPath)) {
-                 const fileContent = fs.readFileSync(localConfigPath, 'utf8');
-                 const userConfig = JSON.parse(fileContent);
-                 config = deepMerge(DEFAULT_CONFIG, userConfig);
-             }
+            // Try looking in current dir for config.json as fallback
+            const localConfigPath = path.resolve('config.json');
+            if (fs.existsSync(localConfigPath)) {
+                const fileContent = fs.readFileSync(localConfigPath, 'utf8');
+                const userConfig = JSON.parse(fileContent);
+                merged = deepMerge(DEFAULT_CONFIG, userConfig);
+            }
         }
 
-        // Environment overrides
-        if (process.env.API_KEY) config.apiKey = process.env.API_KEY;
-        if (process.env.WEBUI_PASSWORD) config.webuiPassword = process.env.WEBUI_PASSWORD;
-        if (process.env.PUBLIC_URL) config.publicUrl = process.env.PUBLIC_URL;
-        else if (process.env.ANTHROPIC_BASE_URL) config.publicUrl = process.env.ANTHROPIC_BASE_URL;
-        if (process.env.DEBUG === 'true') config.debug = true;
-        if (process.env.DEV_MODE === 'true') config.devMode = true;
+        // Environment overrides (always applied on top)
+        if (process.env.API_KEY) merged.apiKey = process.env.API_KEY;
+        if (process.env.WEBUI_PASSWORD) merged.webuiPassword = process.env.WEBUI_PASSWORD;
+        if (process.env.PUBLIC_URL) merged.publicUrl = process.env.PUBLIC_URL;
+        else if (process.env.ANTHROPIC_BASE_URL) merged.publicUrl = process.env.ANTHROPIC_BASE_URL;
+        if (process.env.DEBUG === 'true') merged.debug = true;
+        if (process.env.DEV_MODE === 'true') merged.devMode = true;
 
         // Backward compat: debug implies devMode
-        if (config.debug && !config.devMode) config.devMode = true;
+        if (merged.debug && !merged.devMode) merged.devMode = true;
 
+        _applyConfigInPlace(merged);
     } catch (error) {
         logger.error('[Config] Error loading config:', error);
     }
@@ -140,6 +147,14 @@ function loadConfig() {
 
 // Initial load
 loadConfig();
+
+/**
+ * Hot-reload config from disk — call this after writing a new config.json.
+ * Mutates config in-place so all modules instantly see changes without restart.
+ */
+export function reloadConfig() {
+    loadConfig();
+}
 
 export function getPublicConfig() {
     // Create a deep copy and redact sensitive fields
@@ -154,16 +169,18 @@ export function getPublicConfig() {
 
 export function saveConfig(updates) {
     try {
-        // Apply updates (deep merge to preserve nested configs)
-        config = deepMerge(config, updates);
+        // Merge updates into current config (in-place so all module references stay valid)
+        const merged = deepMerge(config, updates);
+        _applyConfigInPlace(merged);
 
         const dir = path.dirname(CONFIG_FILE);
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        // Save to disk
+        // Persist to disk (write the full current config, not just updates)
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+        logger.info(`[Config] Saved to ${CONFIG_FILE}`);
         return true;
     } catch (error) {
         logger.error('[Config] Failed to save config:', error);
