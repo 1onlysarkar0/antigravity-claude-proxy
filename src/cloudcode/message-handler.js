@@ -185,6 +185,23 @@ export async function sendMessage(anthropicRequest, accountManager, fallbackEnab
                         if (response.status === 429) {
                             const resetMs = parseResetTime(response, errorText);
                             const consecutiveFailures = accountManager.getConsecutiveFailures?.(account.email) || 0;
+                            const totalUsableAccounts = accountManager.getAvailableAccounts(model).length;
+                            const isSingleAccount = totalUsableAccounts <= 1 || accountManager.getAccountCount() <= 1;
+
+                            // Single account active: do NOT lock out for 5 minutes or switch.
+                            // Retry in-place with short progressive backoff (2s, 4s, 6s, 8s).
+                            if (isSingleAccount) {
+                                if (capacityRetryCount < MAX_CAPACITY_RETRIES) {
+                                    const waitMs = Math.min((capacityRetryCount + 1) * 2000, 8000);
+                                    capacityRetryCount++;
+                                    logger.info(`[CloudCode] Rate limit on ${account.email} (single-account mode), retrying ${capacityRetryCount}/${MAX_CAPACITY_RETRIES} after ${formatDuration(waitMs)}...`);
+                                    await sleep(waitMs);
+                                    continue;
+                                }
+                                // Max retries exceeded on single account - set short 5s cooldown
+                                accountManager.markRateLimited(account.email, 5000, model);
+                                throw new Error(`RATE_LIMIT: Temporary rate limit on ${account.email}. Resumes in 5s.`);
+                            }
 
                             // Check if capacity issue (NOT quota) - retry same endpoint with progressive backoff
                             if (isModelCapacityExhausted(errorText)) {
@@ -291,8 +308,12 @@ export async function sendMessage(anthropicRequest, accountManager, fallbackEnab
                             // Mark account as invalid (requires user intervention) and rotate (fixes #248)
                             if (response.status === 403 && isValidationRequired(errorText)) {
                                 const verifyUrl = extractVerificationUrl(errorText);
-                                logger.warn(`[CloudCode] 403 VALIDATION_REQUIRED/PERMISSION_DENIED for ${account.email}, marking invalid and rotating account...`);
-                                accountManager.markInvalid(account.email, 'Account requires verification', verifyUrl);
+                                const lower = (errorText || '').toLowerCase();
+                                const reason = (lower.includes('restricted_age') || lower.includes('not eligible'))
+                                    ? 'Account not eligible (18+ age verification required by Google)'
+                                    : 'Account requires verification';
+                                logger.warn(`[CloudCode] 403 for ${account.email}: ${reason}, marking invalid and rotating account...`);
+                                accountManager.markInvalid(account.email, reason, verifyUrl);
                                 throw new AccountForbiddenError(errorText, account.email);
                             }
 

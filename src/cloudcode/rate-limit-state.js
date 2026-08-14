@@ -110,7 +110,10 @@ export function isValidationRequired(errorText) {
     const lower = (errorText || '').toLowerCase();
     return lower.includes('validation_required') ||
         lower.includes('account_disabled') ||
-        lower.includes('user_disabled');
+        lower.includes('user_disabled') ||
+        lower.includes('restricted_age') ||
+        lower.includes('not eligible for gemini code assist') ||
+        lower.includes('1007');
 }
 
 /**

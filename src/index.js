@@ -77,8 +77,10 @@ const server = app.listen(PORT, HOST, () => {
     const boundHost = typeof address === 'string' ? address : address.address;
     const boundPort = typeof address === 'string' ? null : address.port;
 
-    // Clear console for a clean start
-    console.clear();
+    // Clear console for a clean start in normal mode
+    if (!isDebug) {
+        console.clear();
+    }
 
     const border = '║';
     // align for 2-space indent (60 chars), align4 for 4-space indent (58 chars)

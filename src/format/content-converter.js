@@ -25,7 +25,7 @@ export function convertRole(role) {
  * @param {boolean} isGeminiModel - Whether the model is a Gemini model
  * @returns {Array} Google Generative AI parts array
  */
-export function convertContentToParts(content, isClaudeModel = false, isGeminiModel = false) {
+export function convertContentToParts(content, isClaudeModel = false, isGeminiModel = false, toolIdToNameMap = null) {
     if (typeof content === 'string') {
         return [{ text: content }];
     }
@@ -141,8 +141,15 @@ export function convertContentToParts(content, isClaudeModel = false, isGeminiMo
                 responseContent = { result: texts || (imageParts.length > 0 ? 'Image attached' : '') };
             }
 
+            // For Gemini models, functionResponse.name MUST match the declared function name (e.g., "Bash", "Read")
+            // For Claude models, Google's Claude proxy expects functionResponse.id = tool_use_id
+            const toolName = (isGeminiModel && block.tool_use_id && toolIdToNameMap?.get(block.tool_use_id))
+                || block.name
+                || block.tool_use_id
+                || 'unknown';
+
             const functionResponse = {
-                name: block.tool_use_id || 'unknown',
+                name: toolName,
                 response: responseContent
             };
 

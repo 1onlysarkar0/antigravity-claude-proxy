@@ -104,6 +104,22 @@ export function convertAnthropicToGoogle(anthropicRequest) {
         processedMessages = closeToolLoopForThinking(messages, 'claude');
     }
 
+    // Build tool_use_id -> tool_name map from conversation history (needed by Gemini models)
+    const toolIdToNameMap = new Map();
+    for (const msg of processedMessages) {
+        if (Array.isArray(msg.content)) {
+            for (const b of msg.content) {
+                if (b && (b.type === 'tool_use' || b.functionCall)) {
+                    const id = b.id || b.tool_use_id;
+                    const name = b.name || b.functionCall?.name;
+                    if (id && name) {
+                        toolIdToNameMap.set(id, name);
+                    }
+                }
+            }
+        }
+    }
+
     // Convert messages to contents, then filter unsigned thinking blocks
     for (const msg of processedMessages) {
         let msgContent = msg.content;
@@ -118,7 +134,7 @@ export function convertAnthropicToGoogle(anthropicRequest) {
             msgContent = reorderAssistantContent(msgContent);
         }
 
-        const parts = convertContentToParts(msgContent, isClaudeModel, isGeminiModel);
+        const parts = convertContentToParts(msgContent, isClaudeModel, isGeminiModel, toolIdToNameMap);
 
         // SAFETY: Google API requires at least one part per content message
         // This happens when all thinking blocks are filtered out (unsigned)

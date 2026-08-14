@@ -83,6 +83,18 @@ async function ensureInitialized() {
 app.use(cors());
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 
+// URL normalization middleware:
+// 1. Rewrite duplicate /v1/v1/* prefixes (e.g., when ANTHROPIC_BASE_URL contains /v1 and client also appends /v1/messages)
+// 2. Map direct /messages or /models to /v1/messages or /v1/models if client omitted /v1 prefix
+app.use((req, res, next) => {
+    if (req.url.startsWith('/v1/v1/')) {
+        req.url = req.url.replace(/^\/v1(\/v1)+/, '/v1');
+    } else if (req.url === '/messages' || req.url.startsWith('/messages?') || req.url === '/models' || req.url.startsWith('/models?')) {
+        req.url = '/v1' + req.url;
+    }
+    next();
+});
+
 // API Key authentication middleware for /v1/* endpoints
 app.use('/v1', (req, res, next) => {
     // Skip validation if apiKey is not configured
