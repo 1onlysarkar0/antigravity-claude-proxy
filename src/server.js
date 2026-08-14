@@ -820,6 +820,30 @@ app.post('/v1/messages', async (req, res) => {
             // Do NOT flush headers immediately. We need to wait for the first chunk
             // to ensure we don't send a 200 OK if the upstream fails immediately (e.g. 429/503).
 
+            // ── PRE-FLIGHT QUOTA CHECK ───────────────────────────────────────────
+            // If all accounts are rate-limited with a long wait, reject immediately
+            // BEFORE the generator starts. This avoids Cloudflare 502s caused by
+            // the async generator silently waiting 30+ minutes for quota resets
+            // while holding the HTTP connection open.
+            // Cloudflare proxy timeout is ~100s → long waits = 502 HTML response.
+            accountManager.clearExpiredLimits();
+            if (accountManager.isAllRateLimited(request.model)) {
+                const minWaitMs = accountManager.getMinWaitTimeMs(request.model);
+                // If wait > 10 seconds, fail fast with 429 rather than blocking
+                if (minWaitMs > 10000) {
+                    const resetTime = new Date(Date.now() + minWaitMs).toISOString();
+                    logger.warn(`[API] Pre-flight: all accounts rate-limited for ${request.model}. Wait=${Math.round(minWaitMs/1000)}s. Returning 429.`);
+                    return res.status(429).json({
+                        type: 'error',
+                        error: {
+                            type: 'rate_limit_error',
+                            message: `Rate limited: all accounts exhausted for model ${request.model}. Quota resets at ${resetTime} (in ~${Math.round(minWaitMs/60000)} min).`
+                        }
+                    });
+                }
+            }
+            // ── END PRE-FLIGHT ───────────────────────────────────────────────────
+
             try {
                 // Initialize the generator
                 const generator = sendMessageStream(request, accountManager, FALLBACK_ENABLED);
