@@ -13,6 +13,8 @@
  */
 
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import express from 'express';
 import { getPublicConfig, saveConfig, config } from '../config.js';
 import { DEFAULT_PORT, ACCOUNT_CONFIG_PATH, MAX_ACCOUNTS, DEFAULT_PRESETS, DEFAULT_SERVER_PRESETS } from '../constants.js';
@@ -187,7 +189,7 @@ function validateConfigFields(input) {
     }
     // Account selection strategy and tuning validation
     if (accountSelection && typeof accountSelection === 'object') {
-        const validStrategies = ['sticky', 'round-robin', 'hybrid'];
+        const validStrategies = ['priority', 'sticky', 'round-robin', 'hybrid'];
         const acctUpdate = {};
 
         if (accountSelection.strategy && validStrategies.includes(accountSelection.strategy)) {
@@ -551,6 +553,93 @@ export function mountWebUI(app, dirname, accountManager) {
             });
         } catch (error) {
             logger.error('[WebUI] Import accounts error:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    // ==========================================
+    // Raw config.json API
+    // ==========================================
+
+    /**
+     * GET /api/config/raw - Get raw config.json file content
+     */
+    app.get('/api/config/raw', (req, res) => {
+        try {
+            const configPath = path.join(os.homedir(), '.config', 'antigravity-proxy', 'config.json');
+            if (fs.existsSync(configPath)) {
+                const content = fs.readFileSync(configPath, 'utf8');
+                res.json({ status: 'ok', content, path: configPath });
+            } else {
+                res.json({ status: 'ok', content: JSON.stringify(config, null, 2), path: configPath });
+            }
+        } catch (error) {
+            logger.error('[WebUI] Error getting raw config:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/config/raw - Update raw config.json contents directly
+     */
+    app.post('/api/config/raw', async (req, res) => {
+        try {
+            const { content } = req.body;
+            if (typeof content !== 'string') {
+                return res.status(400).json({ status: 'error', error: 'Content must be a JSON string' });
+            }
+
+            let parsed;
+            try {
+                parsed = JSON.parse(content);
+            } catch (jsonErr) {
+                return res.status(400).json({ status: 'error', error: `Invalid JSON syntax: ${jsonErr.message}` });
+            }
+
+            const configPath = path.join(os.homedir(), '.config', 'antigravity-proxy', 'config.json');
+            fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf8');
+
+            saveConfig(parsed);
+            if (accountManager) {
+                await accountManager.reload();
+            }
+
+            logger.info('[WebUI] Raw config.json successfully updated and reloaded');
+            res.json({ status: 'ok', message: 'Configuration saved and reloaded successfully', config: parsed });
+        } catch (error) {
+            logger.error('[WebUI] Error saving raw config:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/accounts/reorder - Update account priority order
+     */
+    app.post('/api/accounts/reorder', async (req, res) => {
+        try {
+            const { order } = req.body;
+            if (!Array.isArray(order)) {
+                return res.status(400).json({ status: 'error', error: 'Order must be an array of account emails' });
+            }
+
+            const { accounts, settings, activeIndex } = await loadAccounts(ACCOUNT_CONFIG_PATH);
+
+            order.forEach((email, idx) => {
+                const acc = accounts.find(a => a.email === email);
+                if (acc) {
+                    acc.priority = idx + 1;
+                }
+            });
+
+            accounts.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+
+            await saveAccounts(ACCOUNT_CONFIG_PATH, accounts, settings, activeIndex);
+            await accountManager.reload();
+
+            logger.info('[WebUI] Account priorities reordered successfully');
+            res.json({ status: 'ok', message: 'Account order updated', accounts });
+        } catch (error) {
+            logger.error('[WebUI] Error reordering accounts:', error);
             res.status(500).json({ status: 'error', error: error.message });
         }
     });

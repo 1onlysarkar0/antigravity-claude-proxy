@@ -56,7 +56,7 @@ const DEFAULT_CONFIG = {
     modelMapping: {},
     // Account selection strategy configuration
     accountSelection: {
-        strategy: 'hybrid',           // 'sticky' | 'round-robin' | 'hybrid'
+        strategy: 'priority',           // 'priority' | 'sticky' | 'round-robin' | 'hybrid'
         // Hybrid strategy tuning (optional - sensible defaults)
         healthScore: {
             initial: 70,              // Starting score for new accounts

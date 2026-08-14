@@ -8,7 +8,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sendMessage, sendMessageStream, listModels, getModelQuotas, getSubscriptionTier, isValidModel } from './cloudcode/index.js';
+import { sendMessage, sendMessageStream, listModels, getModelQuotas, getSubscriptionTier, isValidModel, getLiveAvailableModelIds } from './cloudcode/index.js';
+import { resolveTargetModel } from './models/resolver.js';
 import { mountWebUI } from './webui/index.js';
 import { config } from './config.js';
 
@@ -739,13 +740,14 @@ app.post('/v1/messages', async (req, res) => {
             temperature
         } = req.body;
 
-        // Resolve model mapping if configured
-        let requestedModel = model || 'claude-3-5-sonnet-20241022';
+        // Dynamic Model Resolution
+        const rawRequestedModel = model || 'claude-3-5-sonnet-20241022';
+        const liveUpstreamModels = getLiveAvailableModelIds();
         const modelMapping = config.modelMapping || {};
-        if (modelMapping[requestedModel] && modelMapping[requestedModel].mapping) {
-            const targetModel = modelMapping[requestedModel].mapping;
-            logger.info(`[Server] Mapping model ${requestedModel} -> ${targetModel}`);
-            requestedModel = targetModel;
+
+        let requestedModel = resolveTargetModel(rawRequestedModel, liveUpstreamModels, modelMapping);
+        if (requestedModel !== rawRequestedModel) {
+            logger.info(`[Server] Resolved model: ${rawRequestedModel} -> ${requestedModel}`);
         }
 
         const modelId = requestedModel;

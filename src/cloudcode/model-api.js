@@ -13,6 +13,7 @@ import {
     getModelFamily,
     MODEL_VALIDATION_CACHE_TTL_MS
 } from '../constants.js';
+import { resolveTargetModel } from '../models/resolver.js';
 import { logger } from '../utils/logger.js';
 import { throttledFetch } from '../utils/helpers.js';
 
@@ -24,13 +25,22 @@ const modelCache = {
 };
 
 /**
- * Check if a model is supported (Claude or Gemini)
+ * Get current set of live available model IDs from upstream cache
+ * @returns {Set<string>}
+ */
+export function getLiveAvailableModelIds() {
+    return modelCache.validModels;
+}
+
+/**
+ * Check if a model is supported (Claude, Gemini, GPT, or custom)
  * @param {string} modelId - Model ID to check
  * @returns {boolean} True if model is supported
  */
 function isSupportedModel(modelId) {
-    const family = getModelFamily(modelId);
-    return family === 'claude' || family === 'gemini';
+    if (!modelId) return false;
+    // Do not filter out any model returned by upstream
+    return true;
 }
 
 /**
@@ -47,12 +57,11 @@ export async function listModels(token) {
     }
 
     const modelList = Object.entries(data.models)
-        .filter(([modelId]) => isSupportedModel(modelId))
         .map(([modelId, modelData]) => ({
             id: modelId,
             object: 'model',
             created: Math.floor(Date.now() / 1000),
-            owned_by: 'anthropic',
+            owned_by: 'google',
             description: modelData.displayName || modelId
         }));
 
@@ -322,20 +331,27 @@ async function populateModelCache(token, projectId = null) {
  * @returns {Promise<boolean>} True if model is valid
  */
 export async function isValidModel(modelId, token, projectId = null) {
+    if (!modelId) return false;
     try {
         // Populate cache if needed
         await populateModelCache(token, projectId);
 
-        // If cache is populated, validate against it
-        if (modelCache.validModels.size > 0) {
-            return modelCache.validModels.has(modelId);
+        // If directly in live upstream cache
+        if (modelCache.validModels.size > 0 && modelCache.validModels.has(modelId)) {
+            return true;
         }
 
-        // Cache empty (fetch failed) - fail open, let API validate
+        // If resolves via canonical specs/aliases
+        const resolved = resolveTargetModel(modelId, modelCache.validModels);
+        if (resolved && (modelCache.validModels.size === 0 || modelCache.validModels.has(resolved))) {
+            return true;
+        }
+
+        // Fail open for future models or custom routing
         return true;
     } catch (error) {
         logger.debug(`[CloudCode] Model validation error: ${error.message}`);
-        // Fail open - let the API validate
+        // Fail open - let the upstream API validate
         return true;
     }
 }

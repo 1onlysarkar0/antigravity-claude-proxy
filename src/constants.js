@@ -90,11 +90,13 @@ export const CLIENT_METADATA = {
 // Cloud Code API endpoints (in fallback order)
 const ANTIGRAVITY_ENDPOINT_DAILY = 'https://daily-cloudcode-pa.googleapis.com';
 const ANTIGRAVITY_ENDPOINT_PROD = 'https://cloudcode-pa.googleapis.com';
+const ANTIGRAVITY_ENDPOINT_SANDBOX = 'https://daily-cloudcode-pa.sandbox.googleapis.com';
 
-// Endpoint fallback order (prod → daily)
+// Endpoint fallback order (daily → prod → sandbox)
 export const ANTIGRAVITY_ENDPOINT_FALLBACKS = [
+    ANTIGRAVITY_ENDPOINT_DAILY,
     ANTIGRAVITY_ENDPOINT_PROD,
-    ANTIGRAVITY_ENDPOINT_DAILY
+    ANTIGRAVITY_ENDPOINT_SANDBOX
 ];
 
 // Required headers for Antigravity API requests
@@ -191,14 +193,15 @@ export const CAPACITY_JITTER_MAX_MS = 10000; // ±5s jitter range
 export const MIN_SIGNATURE_LENGTH = 50; // Minimum valid thinking signature length
 
 // Account selection strategies
-export const SELECTION_STRATEGIES = ['sticky', 'round-robin', 'hybrid'];
-export const DEFAULT_SELECTION_STRATEGY = 'hybrid';
+export const SELECTION_STRATEGIES = ['priority', 'sticky', 'round-robin', 'hybrid'];
+export const DEFAULT_SELECTION_STRATEGY = 'priority';
 
 // Strategy display labels
 export const STRATEGY_LABELS = {
+    'priority': 'Priority (OmniRoute Fill-First)',
     'sticky': 'Sticky (Cache Optimized)',
     'round-robin': 'Round Robin (Load Balanced)',
-    'hybrid': 'Hybrid (Smart Distribution)'
+    'hybrid': 'Priority (OmniRoute Fill-First)'
 };
 
 // Gemini-specific limits
@@ -236,13 +239,8 @@ export function isThinkingModel(modelName) {
     const lower = (modelName || '').toLowerCase();
     // Claude thinking models have "thinking" in the name
     if (lower.includes('claude') && lower.includes('thinking')) return true;
-    // Gemini thinking models: explicit "thinking" in name, OR gemini version 3+
-    if (lower.includes('gemini')) {
-        if (lower.includes('thinking')) return true;
-        // Check for gemini-3 or higher (e.g., gemini-3, gemini-3.5, gemini-4, etc.)
-        const versionMatch = lower.match(/gemini-(\d+)/);
-        if (versionMatch && parseInt(versionMatch[1], 10) >= 3) return true;
-    }
+    // Gemini thinking models: explicit "thinking" in name
+    if (lower.includes('gemini') && lower.includes('thinking')) return true;
     return false;
 }
 
@@ -275,19 +273,8 @@ export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_CONFIG.callbackPort}
 // Reference: GitHub issue #76, CLIProxyAPI, gcli2api
 export const ANTIGRAVITY_SYSTEM_INSTRUCTION = `You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**`;
 
-// Model fallback mapping - maps primary model to fallback when quota exhausted
-export const MODEL_FALLBACK_MAP = {
-    'gemini-3.7-flash-tiered': 'claude-sonnet-4-6',
-    'gemini-3.6-flash-high': 'claude-sonnet-4-6',
-    'gemini-3.5-flash-low': 'claude-sonnet-4-6',
-    'gemini-3.1-pro-high': 'claude-opus-4-6-thinking',
-    'gemini-3.1-pro-low': 'claude-sonnet-4-6',
-    'gemini-3-flash': 'claude-sonnet-4-6',
-    'claude-opus-4-6-thinking': 'gemini-3.7-flash-tiered',
-    'claude-sonnet-4-6': 'gemini-3.7-flash-tiered',
-    'claude-3-7-sonnet-20250219': 'gemini-3.7-flash-tiered',
-    'claude-3-5-sonnet-20241022': 'gemini-3.7-flash-tiered'
-};
+// Dynamic model fallback mapping container (populated dynamically from config and live upstream models)
+export const MODEL_FALLBACK_MAP = {};
 
 // Default test models for each family (used by test suite)
 export const TEST_MODELS = {

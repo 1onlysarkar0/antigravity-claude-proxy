@@ -29,11 +29,19 @@ window.Components.serverConfig = () => ({
     editingJsonText: '',
     jsonParseError: null,
 
+    // Raw config.json direct editor state
+    rawJsonText: '',
+    rawJsonPath: '',
+    rawJsonLoading: false,
+    rawJsonSaving: false,
+    rawJsonError: null,
+
     init() {
         // Initial fetch if this is the active sub-tab
         if (this.$store.global.settingsTab === 'server') {
             this.fetchServerConfig();
             this.fetchServerPresets();
+            this.fetchRawConfig();
         }
 
         // Watch settings sub-tab (skip initial trigger)
@@ -41,6 +49,7 @@ window.Components.serverConfig = () => ({
             if (tab === 'server' && oldTab !== undefined) {
                 this.fetchServerConfig();
                 this.fetchServerPresets();
+                this.fetchRawConfig();
             }
         });
 
@@ -63,6 +72,72 @@ window.Components.serverConfig = () => ({
             this.serverConfig = data.config || {};
         } catch (e) {
             console.error('Failed to fetch server config:', e);
+        }
+    },
+
+    async fetchRawConfig() {
+        this.rawJsonLoading = true;
+        this.rawJsonError = null;
+        const password = Alpine.store('global').webuiPassword;
+        try {
+            const { response, newPassword } = await window.utils.request('/api/config/raw', {}, password);
+            if (newPassword) Alpine.store('global').webuiPassword = newPassword;
+            if (!response.ok) throw new Error('Failed to fetch raw config');
+            const data = await response.json();
+            this.rawJsonText = data.content || '';
+            this.rawJsonPath = data.path || '~/.config/antigravity-proxy/config.json';
+        } catch (e) {
+            this.rawJsonError = e.message;
+            console.error('Failed to fetch raw config:', e);
+        } finally {
+            this.rawJsonLoading = false;
+        }
+    },
+
+    formatRawJson() {
+        try {
+            const parsed = JSON.parse(this.rawJsonText);
+            this.rawJsonText = JSON.stringify(parsed, null, 2);
+            this.rawJsonError = null;
+            Alpine.store('global').showToast('JSON formatted', 'info');
+        } catch (e) {
+            this.rawJsonError = 'Invalid JSON: ' + e.message;
+            Alpine.store('global').showToast('Invalid JSON syntax', 'error');
+        }
+    },
+
+    async saveRawConfig() {
+        this.rawJsonError = null;
+        try {
+            JSON.parse(this.rawJsonText);
+        } catch (e) {
+            this.rawJsonError = 'Invalid JSON: ' + e.message;
+            Alpine.store('global').showToast('Invalid JSON syntax: ' + e.message, 'error');
+            return;
+        }
+
+        this.rawJsonSaving = true;
+        const password = Alpine.store('global').webuiPassword;
+        try {
+            const { response, newPassword } = await window.utils.request('/api/config/raw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: this.rawJsonText })
+            }, password);
+
+            if (newPassword) Alpine.store('global').webuiPassword = newPassword;
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to save config');
+            }
+
+            Alpine.store('global').showToast('config.json saved and reloaded!', 'success');
+            await this.fetchServerConfig();
+        } catch (e) {
+            this.rawJsonError = e.message;
+            Alpine.store('global').showToast('Failed to save config: ' + e.message, 'error');
+        } finally {
+            this.rawJsonSaving = false;
         }
     },
 

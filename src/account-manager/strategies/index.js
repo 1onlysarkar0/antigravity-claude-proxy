@@ -4,6 +4,7 @@
  * Creates and exports account selection strategy instances.
  */
 
+import { PriorityStrategy } from './priority-strategy.js';
 import { StickyStrategy } from './sticky-strategy.js';
 import { RoundRobinStrategy } from './round-robin-strategy.js';
 import { HybridStrategy } from './hybrid-strategy.js';
@@ -20,7 +21,7 @@ export const DEFAULT_STRATEGY = DEFAULT_SELECTION_STRATEGY;
 
 /**
  * Create a strategy instance
- * @param {string} strategyName - Name of the strategy ('sticky', 'round-robin', 'hybrid')
+ * @param {string} strategyName - Name of the strategy ('priority', 'sticky', 'round-robin', 'hybrid')
  * @param {Object} config - Strategy configuration
  * @returns {BaseStrategy} The strategy instance
  */
@@ -28,6 +29,12 @@ export function createStrategy(strategyName, config = {}) {
     const name = (strategyName || DEFAULT_STRATEGY).toLowerCase();
 
     switch (name) {
+        case 'priority':
+        case 'fill-first':
+        case 'fillfirst':
+            logger.debug('[Strategy] Creating PriorityStrategy');
+            return new PriorityStrategy(config);
+
         case 'sticky':
             logger.debug('[Strategy] Creating StickyStrategy');
             return new StickyStrategy(config);
@@ -38,12 +45,12 @@ export function createStrategy(strategyName, config = {}) {
             return new RoundRobinStrategy(config);
 
         case 'hybrid':
-            logger.debug('[Strategy] Creating HybridStrategy');
-            return new HybridStrategy(config);
+            logger.debug('[Strategy] Creating PriorityStrategy (hybrid alias)');
+            return new PriorityStrategy(config);
 
         default:
             logger.warn(`[Strategy] Unknown strategy "${strategyName}", falling back to ${DEFAULT_STRATEGY}`);
-            return new HybridStrategy(config);
+            return new PriorityStrategy(config);
     }
 }
 
@@ -55,7 +62,7 @@ export function createStrategy(strategyName, config = {}) {
 export function isValidStrategy(name) {
     if (!name) return false;
     const lower = name.toLowerCase();
-    return STRATEGY_NAMES.includes(lower) || lower === 'roundrobin';
+    return STRATEGY_NAMES.includes(lower) || lower === 'roundrobin' || lower === 'fill-first' || lower === 'fillfirst';
 }
 
 /**
@@ -66,10 +73,12 @@ export function isValidStrategy(name) {
 export function getStrategyLabel(name) {
     const lower = (name || DEFAULT_STRATEGY).toLowerCase();
     if (lower === 'roundrobin') return STRATEGY_LABELS['round-robin'];
+    if (lower === 'fill-first' || lower === 'fillfirst') return STRATEGY_LABELS['priority'];
     return STRATEGY_LABELS[lower] || STRATEGY_LABELS[DEFAULT_STRATEGY];
 }
 
 // Re-export strategies for direct use
+export { PriorityStrategy } from './priority-strategy.js';
 export { StickyStrategy } from './sticky-strategy.js';
 export { RoundRobinStrategy } from './round-robin-strategy.js';
 export { HybridStrategy } from './hybrid-strategy.js';

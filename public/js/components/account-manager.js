@@ -116,6 +116,39 @@ window.Components.accountManager = () => ({
         }
     },
 
+    async moveAccount(index, direction) {
+        const accounts = Alpine.store('data').accounts || [];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= accounts.length) return;
+
+        const store = Alpine.store('global');
+        const reordered = [...accounts];
+        const temp = reordered[index];
+        reordered[index] = reordered[targetIndex];
+        reordered[targetIndex] = temp;
+
+        const order = reordered.map(a => a.email);
+
+        try {
+            const { response, newPassword } = await window.utils.request('/api/accounts/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order })
+            }, store.webuiPassword);
+            if (newPassword) store.webuiPassword = newPassword;
+
+            if (response.ok) {
+                store.showToast('Account priority updated', 'success');
+                await Alpine.store('data').fetchData();
+            } else {
+                const errData = await response.json();
+                store.showToast('Failed to update priority: ' + errData.error, 'error');
+            }
+        } catch (err) {
+            store.showToast('Failed to update priority: ' + err.message, 'error');
+        }
+    },
+
     async fixAccount(email) {
         const store = Alpine.store('global');
         const dataStore = Alpine.store('data');

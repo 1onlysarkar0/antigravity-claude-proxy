@@ -516,6 +516,21 @@ export class AccountManager {
     }
 
     /**
+     * Set account priority
+     * @param {string} email - Account email
+     * @param {number} priority - Priority value (1 = highest)
+     * @returns {boolean} True if account updated
+     */
+    setAccountPriority(email, priority) {
+        const account = this.#accounts.find(a => a.email === email);
+        if (!account) return false;
+        account.priority = Math.max(1, parseInt(priority, 10) || 1);
+        this.saveToDisk();
+        logger.info(`[AccountManager] Updated priority for ${email} to ${account.priority}`);
+        return true;
+    }
+
+    /**
      * Get all accounts (internal use for quota fetching)
      * Returns the full account objects including credentials
      * @returns {Array<Object>} Array of account objects

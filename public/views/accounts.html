@@ -85,7 +85,8 @@
         <table class="w-full">
             <thead x-show="$store.data.accounts.length > 0">
                 <tr class="bg-space-900/50 border-b border-space-border/50">
-                    <th class="pl-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-16" x-text="$store.global.t('enabled')">Enabled</th>
+                    <th class="pl-6 py-3 text-left text-[10px] font-bold text-neon-cyan uppercase tracking-wider w-20">Priority</th>
+                    <th class="py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-16" x-text="$store.global.t('enabled')">Enabled</th>
                     <th class="py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider flex-1 min-w-[200px]" x-text="$store.global.t('accountEmail')">Account (Email)</th>
                     <th class="py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20" x-text="$store.global.t('source')">Source</th>
                     <th class="py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-16" x-text="$store.global.t('tier')">Tier</th>
@@ -128,10 +129,24 @@
                     </tr>
                 </template>
 
-                <!-- Account Rows -->
                 <template x-for="acc in filteredAccounts" :key="acc.email">
                     <tr class="border-b border-space-border/30 last:border-0 hover:bg-white/5 transition-colors group">
                         <td class="pl-6 py-4">
+                            <div class="inline-flex items-center gap-1.5 bg-space-800/90 px-2 py-1 rounded border border-space-border">
+                                <span class="font-mono text-xs font-bold text-neon-cyan" x-text="'P' + ($store.data.accounts.indexOf(acc) + 1)"></span>
+                                <div class="flex flex-col">
+                                    <button class="text-gray-400 hover:text-neon-cyan text-[8px] leading-[10px] px-0.5"
+                                            @click="moveAccount($store.data.accounts.indexOf(acc), 'up')"
+                                            :disabled="$store.data.accounts.indexOf(acc) === 0"
+                                            :class="{ 'opacity-20 cursor-not-allowed': $store.data.accounts.indexOf(acc) === 0 }">▲</button>
+                                    <button class="text-gray-400 hover:text-neon-cyan text-[8px] leading-[10px] px-0.5"
+                                            @click="moveAccount($store.data.accounts.indexOf(acc), 'down')"
+                                            :disabled="$store.data.accounts.indexOf(acc) === $store.data.accounts.length - 1"
+                                            :class="{ 'opacity-20 cursor-not-allowed': $store.data.accounts.indexOf(acc) === $store.data.accounts.length - 1 }">▼</button>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4">
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" class="sr-only peer"
                                     :checked="acc.enabled !== false"

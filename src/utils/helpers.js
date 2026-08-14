@@ -61,14 +61,23 @@ export function sleep(ms) {
  * @returns {boolean} True if it is a network error
  */
 export function isNetworkError(error) {
-    const msg = error.message.toLowerCase();
+    if (!error) return false;
+    const msg = (error.message || String(error)).toLowerCase();
     return (
         msg.includes('fetch failed') ||
         msg.includes('network error') ||
         msg.includes('econnreset') ||
         msg.includes('etimedout') ||
         msg.includes('socket hang up') ||
-        msg.includes('timeout')
+        msg.includes('timeout') ||
+        msg.includes('wsasend') ||
+        msg.includes('no such host') ||
+        msg.includes('enotfound') ||
+        msg.includes('econnrefused') ||
+        msg.includes('ehostunreach') ||
+        msg.includes('enetunreach') ||
+        msg.includes('forcibly closed') ||
+        msg.includes('connection reset')
     );
 }
 

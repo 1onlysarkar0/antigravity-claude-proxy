@@ -26,8 +26,9 @@ export async function loadAccounts(configPath = ACCOUNT_CONFIG_PATH) {
         const configData = await readFile(configPath, 'utf-8');
         const config = JSON.parse(configData);
 
-        const accounts = (config.accounts || []).map(acc => ({
+        const accounts = (config.accounts || []).map((acc, idx) => ({
             ...acc,
+            priority: (typeof acc.priority === 'number' && acc.priority > 0) ? acc.priority : (idx + 1),
             lastUsed: acc.lastUsed || null,
             enabled: acc.enabled !== false, // Default to true if not specified
             // Reset invalid flag on startup - give accounts a fresh chance

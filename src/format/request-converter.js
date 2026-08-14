@@ -8,6 +8,7 @@ import {
     getModelFamily,
     isThinkingModel
 } from '../constants.js';
+import { capThinkingBudget, capMaxOutputTokens } from '../models/resolver.js';
 import { convertContentToParts, convertRole } from './content-converter.js';
 import { sanitizeSchema, cleanSchema } from './schema-sanitizer.js';
 import {
@@ -158,8 +159,9 @@ export function convertAnthropicToGoogle(anthropicRequest) {
     }
 
     // Generation config
-    if (max_tokens) {
-        googleRequest.generationConfig.maxOutputTokens = max_tokens;
+    const cappedTokens = capMaxOutputTokens(modelName, max_tokens);
+    if (cappedTokens) {
+        googleRequest.generationConfig.maxOutputTokens = cappedTokens;
     }
     if (temperature !== undefined) {
         googleRequest.generationConfig.temperature = temperature;
@@ -174,18 +176,19 @@ export function convertAnthropicToGoogle(anthropicRequest) {
         googleRequest.generationConfig.stopSequences = stop_sequences;
     }
 
-    // Enable thinking for thinking models (Claude and Gemini 3+)
-    if (isThinking) {
+    // Enable thinking for thinking models (Claude and Gemini)
+    const hasExplicitThinking = !!thinking || (typeof anthropicRequest.output_config?.effort === 'string');
+    const isExplicitThinkingModel = modelName.toLowerCase().includes('thinking');
+
+    if (isThinking && (isClaudeModel ? true : (hasExplicitThinking || isExplicitThinkingModel))) {
         if (isClaudeModel) {
             // Claude thinking config
             const thinkingConfig = {
                 include_thoughts: true
             };
 
-            // Cloud Code API requires thinking_budget to actually produce thinking blocks.
-            // Without it, include_thoughts alone is ignored and Claude falls back to
-            // <thinking> XML tags in text. Default to 32000 when not provided (e.g. adaptive mode).
-            const thinkingBudget = thinking?.budget_tokens || 32000;
+            const rawBudget = thinking?.budget_tokens || 32000;
+            const thinkingBudget = capThinkingBudget(modelName, rawBudget);
             thinkingConfig.thinking_budget = thinkingBudget;
             logger.debug(`[RequestConverter] Claude thinking enabled with budget: ${thinkingBudget}${!thinking?.budget_tokens ? ' (default)' : ''}`);
 
@@ -204,15 +207,21 @@ export function convertAnthropicToGoogle(anthropicRequest) {
             googleRequest.generationConfig.thinkingConfig = thinkingConfig;
         } else if (isGeminiModel) {
             // Gemini thinking config (uses camelCase)
-            // Clamp budget to model-specific max (e.g., Gemini 2.5 Flash max is 24,576)
-            const thinkingConfig = {
-                includeThoughts: true,
-                thinkingBudget: clampGeminiThinkingBudget(modelName, thinking?.budget_tokens)
-            };
-            logger.debug(`[RequestConverter] Gemini thinking enabled with budget: ${thinkingConfig.thinkingBudget}`);
+            const rawBudget = thinking?.budget_tokens ?? (isExplicitThinkingModel ? 16000 : 0);
+            const budget = capThinkingBudget(modelName, rawBudget);
 
+            // Only attach thinkingConfig if budget > 0 or explicit thinking model
+            if (budget > 0 || isExplicitThinkingModel) {
+                const thinkingConfig = {
+                    includeThoughts: true
+                };
+                if (budget > 0) {
+                    thinkingConfig.thinkingBudget = budget;
+                }
 
-            googleRequest.generationConfig.thinkingConfig = thinkingConfig;
+                logger.debug(`[RequestConverter] Gemini thinking enabled with budget: ${thinkingConfig.thinkingBudget || 'dynamic'}`);
+                googleRequest.generationConfig.thinkingConfig = thinkingConfig;
+            }
         }
     }
 
