@@ -79,33 +79,33 @@ export async function sendMessage(anthropicRequest, accountManager, fallbackEnab
             }
 
             if (accountManager.isAllRateLimited(model)) {
+                // 1. Try immediate dynamic fallback if an available fallback model exists with quota
+                if (fallbackEnabled) {
+                    const fallbackModel = getFallbackModel(model, null, (m) => !accountManager.isAllRateLimited(m));
+                    if (fallbackModel) {
+                        logger.warn(`[CloudCode] All accounts rate-limited for ${model}. Immediate dynamic fallback to ${fallbackModel}`);
+                        const fallbackRequest = { ...anthropicRequest, model: fallbackModel };
+                        return await sendMessage(fallbackRequest, accountManager, false);
+                    }
+                }
+
                 const minWaitMs = accountManager.getMinWaitTimeMs(model);
                 const resetTime = new Date(Date.now() + minWaitMs).toISOString();
 
-                // If wait time is too long (> 2 minutes), try fallback first, then throw error
+                // 2. If wait time is too long (> 2 minutes), throw error
                 if (minWaitMs > MAX_WAIT_BEFORE_ERROR_MS) {
-                    // Check if fallback is enabled and available
-                    if (fallbackEnabled) {
-                        const fallbackModel = getFallbackModel(model, null, (m) => !accountManager.isAllRateLimited(m));
-                        if (fallbackModel) {
-                            logger.warn(`[CloudCode] All accounts exhausted for ${model} (${formatDuration(minWaitMs)} wait). Attempting dynamic fallback to ${fallbackModel}`);
-                            const fallbackRequest = { ...anthropicRequest, model: fallbackModel };
-                            return await sendMessage(fallbackRequest, accountManager, false);
-                        }
-                    }
                     throw new Error(
                         `RESOURCE_EXHAUSTED: Rate limited on ${model}. Quota will reset after ${formatDuration(minWaitMs)}. Next available: ${resetTime}`
                     );
                 }
 
-                // Wait for shortest reset time
+                // 3. Otherwise wait for shortest reset time
                 const accountCount = accountManager.getAccountCount();
-                logger.warn(`[CloudCode] All ${accountCount} account(s) rate-limited. Waiting ${formatDuration(minWaitMs)}...`);
+                logger.warn(`[CloudCode] All ${accountCount} account(s) rate-limited on ${model}. Waiting ${formatDuration(minWaitMs)}...`);
                 await sleep(minWaitMs + 500); // Add 500ms buffer
                 accountManager.clearExpiredLimits();
 
                 // CRITICAL FIX: Don't count waiting for rate limits as a failed attempt
-                // This prevents "Max retries exceeded" when we are just patiently waiting
                 attempt--;
                 continue; // Retry the loop
             }

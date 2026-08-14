@@ -90,8 +90,12 @@ export function getFallbackModel(model, availableModels = null, isModelAvailable
         }
     }
 
-    // If Gemini Flash exhausted -> try other Flash tiers
+    // If Gemini Flash exhausted -> try other Flash tiers (prioritize high-quota tiered/3.7 flash)
     if (lower.includes('flash')) {
+        const tieredFlash = candidates.filter(m => m.toLowerCase().includes('flash') && (m.includes('tiered') || m.includes('3.7')));
+        for (const c of tieredFlash) {
+            if (!isModelAvailable || isModelAvailable(c)) return c;
+        }
         const otherFlash = candidates.filter(m => m.toLowerCase().includes('flash'));
         for (const c of otherFlash) {
             if (!isModelAvailable || isModelAvailable(c)) return c;
