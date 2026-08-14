@@ -62,9 +62,8 @@ export function convertGoogleToAnthropic(googleResponse, model) {
                 input: part.functionCall.args || {}
             };
 
-            // For Gemini 3+, include thoughtSignature from the part level
+            // For Gemini 3+, cache the thoughtSignature locally for future requests
             if (part.thoughtSignature && part.thoughtSignature.length >= MIN_SIGNATURE_LENGTH) {
-                toolUseBlock.thoughtSignature = part.thoughtSignature;
                 // Cache for future requests (Claude Code may strip this field)
                 cacheSignature(toolId, part.thoughtSignature);
             }

@@ -188,9 +188,8 @@ export async function* streamSSEResponse(response, originalModel) {
                             input: {}
                         };
 
-                        // Store the signature in the tool_use block for later retrieval
+                        // Store the signature in the cache for later retrieval when tool_result is sent
                         if (functionCallSignature && functionCallSignature.length >= MIN_SIGNATURE_LENGTH) {
-                            toolUseBlock.thoughtSignature = functionCallSignature;
                             // Cache for future requests (Claude Code may strip this field)
                             cacheSignature(toolId, functionCallSignature);
                         }
