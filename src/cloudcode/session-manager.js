@@ -1,66 +1,68 @@
 /**
  * Session Management for Cloud Code
  *
- * Handles session ID derivation for prompt caching continuity.
- * Session IDs are derived from the first user message to ensure
- * the same conversation uses the same session across turns.
+ * Handles session ID derivation for prompt caching and concurrency isolation.
+ * Subagents and distinct conversations get isolated session IDs to prevent
+ * session collision and 429 lockouts in Cloud Code PA.
  */
 
 import crypto from 'crypto';
 
-
-// Runtime storage for session IDs (per account)
-// This mimics the behavior of the binary which generates a session ID at startup
-// and keeps it for the process lifetime.
-// Key: accountEmail, Value: sessionId
-const runtimeSessionStore = new Map();
+// Runtime storage for session IDs (keyed by conversation seed + accountEmail)
+const conversationSessionStore = new Map();
 
 /**
- * Get or create a session ID for the given account.
- * 
- * The binary generates a session ID once at startup: `p.sessionID = rs() + Date.now()`.
- * Since our proxy is long-running, we simulate this "per-launch" behavior by storing
- * a generated ID in memory for each account.
+ * Get or create a session ID for a conversation.
+ * Scoped by conversation fingerprint to ensure subagents run in isolated sessions.
  *
- * - If the proxy restarts, the ID changes (matching binary/VS Code restart behavior).
- * - Within a running proxy instance, the ID is stable for that account.
- * - This enables prompt caching while using the EXACT random logic of the binary.
- *
- * @param {Object} anthropicRequest - The Anthropic-format request (unused for ID generation now)
- * @param {string} accountEmail - The account email to scope the session ID
- * @returns {string} A stable session ID string matching binary format
+ * @param {Object} anthropicRequest - The Anthropic-format request
+ * @param {string} accountEmail - The account email
+ * @returns {string} A stable session ID string
  */
 export function deriveSessionId(anthropicRequest, accountEmail) {
-    if (!accountEmail) {
-        // Fallback for requests without an account (should differ every time)
-        return generateBinaryStyleId();
+    try {
+        let seed = '';
+        const messages = anthropicRequest?.messages || [];
+        const firstUserMsg = messages.find(m => m.role === 'user');
+
+        if (firstUserMsg) {
+            if (typeof firstUserMsg.content === 'string') {
+                seed = firstUserMsg.content.substring(0, 300);
+            } else if (Array.isArray(firstUserMsg.content)) {
+                const textBlock = firstUserMsg.content.find(b => b.type === 'text');
+                if (textBlock && textBlock.text) {
+                    seed = textBlock.text.substring(0, 300);
+                }
+            }
+        }
+
+        // Include system prompt to distinguish specialized agents (e.g. database-agent vs research-agent)
+        if (anthropicRequest?.system) {
+            const sysText = typeof anthropicRequest.system === 'string'
+                ? anthropicRequest.system
+                : (Array.isArray(anthropicRequest.system) ? (anthropicRequest.system[0]?.text || '') : '');
+            seed = sysText.substring(0, 200) + '::' + seed;
+        }
+
+        if (seed) {
+            const key = `${accountEmail || 'default'}:${crypto.createHash('md5').update(seed).digest('hex')}`;
+            if (conversationSessionStore.has(key)) {
+                return conversationSessionStore.get(key);
+            }
+            const newId = crypto.randomUUID() + Date.now().toString();
+            conversationSessionStore.set(key, newId);
+            return newId;
+        }
+    } catch {
+        // Ignore seed generation errors
     }
 
-    // Check if we already have a session ID for this account in this process run
-    if (runtimeSessionStore.has(accountEmail)) {
-        return runtimeSessionStore.get(accountEmail);
-    }
-
-    // Generate a new ID using the binary's exact logic
-    const newSessionId = generateBinaryStyleId();
-
-    // Store it for future requests from this account
-    runtimeSessionStore.set(accountEmail, newSessionId);
-
-    return newSessionId;
-}
-
-/**
- * Generate a Session ID using the binary's exact logic.
- * logic: `rs() + Date.now()` where `rs()` is randomUUID
- */
-function generateBinaryStyleId() {
     return crypto.randomUUID() + Date.now().toString();
 }
 
 /**
- * Clears all session IDs (e.g. useful for testing or explicit reset)
+ * Clears all stored session IDs
  */
 export function clearSessionStore() {
-    runtimeSessionStore.clear();
+    conversationSessionStore.clear();
 }
