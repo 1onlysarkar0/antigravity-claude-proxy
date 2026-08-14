@@ -88,8 +88,8 @@ const DEFAULT_CONFIG = {
 
 // Config locations
 const HOME_DIR = os.homedir();
-const CONFIG_DIR = path.join(HOME_DIR, '.config', 'antigravity-proxy');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const CONFIG_DIR = process.env.DATA_DIR || process.env.CONFIG_DIR || process.env.PERSISTENT_DIR || path.join(HOME_DIR, '.config', 'antigravity-proxy');
+const CONFIG_FILE = process.env.CONFIG_FILE || path.join(CONFIG_DIR, 'config.json');
 
 // Ensure config dir exists
 if (!fs.existsSync(CONFIG_DIR)) {

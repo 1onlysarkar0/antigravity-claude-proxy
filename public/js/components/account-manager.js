@@ -116,6 +116,33 @@ window.Components.accountManager = () => ({
         }
     },
 
+    async copyCloudEnv() {
+        const store = Alpine.store('global');
+        const accounts = Alpine.store('data').accounts || [];
+        if (accounts.length === 0) {
+            store.showToast('No accounts to export', 'error');
+            return;
+        }
+
+        const exportData = accounts.map(acc => ({
+            email: acc.email,
+            priority: acc.priority,
+            source: acc.source,
+            enabled: acc.enabled,
+            refreshToken: acc.refreshToken,
+            apiKey: acc.apiKey,
+            subscription: acc.subscription
+        }));
+
+        const jsonString = JSON.stringify(exportData);
+        try {
+            await navigator.clipboard.writeText(jsonString);
+            store.showToast('Copied ACCOUNTS_JSON to clipboard! Set as env var in Render/Railway.', 'success');
+        } catch {
+            store.showToast('Failed to copy to clipboard', 'error');
+        }
+    },
+
     async moveAccount(index, direction) {
         const accounts = Alpine.store('data').accounts || [];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;

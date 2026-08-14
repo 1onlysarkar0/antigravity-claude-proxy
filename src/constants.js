@@ -133,16 +133,19 @@ export const REQUEST_BODY_LIMIT = config?.requestBodyLimit || '50mb';
 export const ANTIGRAVITY_AUTH_PORT = 9092;
 export const DEFAULT_PORT = config?.port || 8080;
 
+// Data and configuration directory determination: DATA_DIR > CONFIG_DIR > PERSISTENT_DIR > ~/.config/antigravity-proxy
+export const DATA_DIRECTORY = process.env.DATA_DIR || process.env.CONFIG_DIR || process.env.PERSISTENT_DIR || join(homedir(), '.config/antigravity-proxy');
+
 // Multi-account configuration
-export const ACCOUNT_CONFIG_PATH = config?.accountConfigPath || join(
-    homedir(),
-    '.config/antigravity-proxy/accounts.json'
+export const ACCOUNT_CONFIG_PATH = process.env.ACCOUNT_CONFIG_PATH || config?.accountConfigPath || join(
+    DATA_DIRECTORY,
+    'accounts.json'
 );
 
 // Usage history persistence path
 export const USAGE_HISTORY_PATH = join(
-    homedir(),
-    '.config/antigravity-proxy/usage-history.json'
+    DATA_DIRECTORY,
+    'usage-history.json'
 );
 
 // Antigravity app database path (for legacy single-account token extraction)
